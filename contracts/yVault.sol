@@ -13,7 +13,7 @@ contract yVault is ERC20 {
     using Address for address;
     using SafeMath for uint256;
     
-    struct tokenDeposit {
+    struct TokenDeposit {
       uint256 depositAmount;
       uint256 depositTime;
     }
@@ -24,8 +24,19 @@ contract yVault is ERC20 {
       ONE_YEAR_LOCKUP
     }
 
+    // APY Rates
+    uint256 private constant NO_LOCKUP_APY = 0.12e18; // 12%
+    uint256 private constant EIGHT_WEEK_LOCKUP_APY = 0.20e18; // 20%
+    uint256 private constant ONE_YEAR_LOCKUP_APY = 0.35e18; // 35%     
+
+    // Withdrawal Fees
+    uint256 private constant FIXED_LOCKUP_EARLY_WITHDRAWAL_FEE = 0.15e18; // 15%     
+
+    // This will be DAI, but is generically defined for good abstraction practice
     IERC20 public token;
-    mapping (address => mapping(LockupKind => tokenDeposit[])) userTokenDepositsByLockup;
+
+    // userAddress => LockupKind => tokenDeposit object
+    mapping (address => mapping(LockupKind => TokenDeposit[])) userTokenDepositsByLockupType;
 
     constructor(address _token) public ERC20(
       string(abi.encodePacked("yearn ", ERC20(_token).name())),
@@ -33,39 +44,49 @@ contract yVault is ERC20 {
     ) {
       token = IERC20(_token);    
     }
-     
-    // userAddress => tokenAddress => token amount
-    mapping (address => mapping (address => uint256)) userTokenBalance;
 
-    event tokenDepositComplete(address tokenAddress, uint256 amount, uint256 lockupTime);
-    event tokenWithdrawalComplete(address tokenAddress, uint256 amount);
+    event TokenDepositComplete(IERC20 tokenAddress, uint256 amount, uint256 lockupTime);
+    event TokenWithdrawalComplete(IERC20 tokenAddress, uint256 amount);
+    event exchangeYTokenComplete(IERC20 tokenAddress, uint256 amount);
 
-    function depositToken( uint256 amount) public  {
+    function addTokenDeposit(uint256 amount, LockupKind lockupType) public  {
         require(token.balanceOf(msg.sender) >= amount, "Your token amount must be greater then you are trying to deposit");
         token.safeApprove(address(this), amount);
-        require(token.safeTransferFrom(msg.sender, address(this), amount));
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
-        userTokenBalance[msg.sender][tokenAddress] += amount;
+        TokenDeposit memory deposit;
+        deposit.depositAmount = amount;
+        deposit.depositTime = block.timestamp;
+
+        userTokenDepositsByLockupType[msg.sender][lockupType].push(deposit);
         
-        emit tokenDepositComplete(tokenAddress, amount);
+        emit TokenDepositComplete(token, amount, deposit.depositTime);
     }
 
 
-    function withDrawAll() public {
-        require(userTokenBalance[msg.sender][tokenAddress] > 0, "User doesnt has funds on this vault");
-        uint256 amount = userTokenBalance[msg.sender][tokenAddress];
-        require(IERC20(tokenAddress).transfer(msg.sender, amount), "the transfer failed");
-        userTokenBalance[msg.sender][tokenAddress] = 0;
-        emit tokenWithdrawalComplete(tokenAddress, amount);
+    function exchangeYTokenForToken() public {
+        require(balanceOf(msg.sender) > 0, "User doesnt has funds on this vault");
+        uint256 amount = balanceOf(msg.sender);
+        _burn(msg.sender, amount);
+
+        // Send Token(DAI) from this contract to the user who exchanged yToken(yDAI)
+        token.safeTransfer(msg.sender, amount);
+        emit exchangeYTokenComplete(token, amount);
     }
 
-    function withDrawAmount(uint256 amount) public {
-        require(userTokenBalance[msg.sender][tokenAddress] >= amount);
-        require(IERC20(tokenAddress).transfer(msg.sender, amount), "the transfer failed");
-        userTokenBalance[msg.sender][tokenAddress] -= amount;
-        uint256 yDaiReceived
-        _mint(msg.sender, shares);
-        emit tokenWithdrawalComplete(tokenAddress, amount);
+    function withdrawAmountFromLockup(uint256 amount, LockupKind lockupType) public {
+        if (lockupType == LockupKind.NO_LOCKUP) {
+          // Withdraw No Lockup Tokens
+        } else {
+          // Handle Withdrawing Fixed Lockup Tokens
+        }
+
+        // require(userTokenBalance[msg.sender][tokenAddress] >= amount);
+        // require(IERC20(tokenAddress).transfer(msg.sender, amount), "the transfer failed");
+        // userTokenBalance[msg.sender][tokenAddress] -= amount;
+        // uint256 yDaiReceived;
+        // _mint(msg.sender, yDaiReceived);
+        // emit tokenWithdrawalComplete(tokenAddress, amount);
     }
 
 }
