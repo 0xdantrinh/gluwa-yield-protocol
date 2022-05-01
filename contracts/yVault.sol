@@ -139,6 +139,13 @@ contract yVault is ERC20, Ownable {
       }
     }
 
+    function unwrapYTokens() public {
+      uint256 amount = yTokenBalances[msg.sender];
+      require(amount > 0, "You must have wrapped yTokens to unwrap");
+      yTokenBalances[msg.sender] = 0;
+      _mint(msg.sender, amount.mul(10 ** uint256(decimals())));
+    }
+
     // function updateYVaultDeposits() public {
 
     // }
