@@ -7,8 +7,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract yVault is ERC20 {
+contract yVault is ERC20, Ownable {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -16,6 +17,7 @@ contract yVault is ERC20 {
     struct TokenDeposit {
       uint256 depositAmount;
       uint256 depositTime;
+      uint256 lastInterestPaymentTime;
     }
 
     enum LockupKind {
@@ -38,6 +40,8 @@ contract yVault is ERC20 {
     // userAddress => LockupKind => tokenDeposit object
     mapping (address => mapping(LockupKind => TokenDeposit[])) userTokenDepositsByLockupType;
 
+    mapping (address => uint256) yTokenBalances;
+
     constructor(address _token) public ERC20(
       string(abi.encodePacked("yearn ", ERC20(_token).name())),
       string(abi.encodePacked("y", ERC20(_token).symbol()))
@@ -57,7 +61,7 @@ contract yVault is ERC20 {
         TokenDeposit memory deposit;
         deposit.depositAmount = amount;
         deposit.depositTime = block.timestamp;
-
+        deposit.lastInterestPaymentTime = block.timestamp;
         userTokenDepositsByLockupType[msg.sender][lockupType].push(deposit);
         
         emit TokenDepositComplete(token, amount, deposit.depositTime);
@@ -79,6 +83,11 @@ contract yVault is ERC20 {
           // Withdraw No Lockup Tokens
         } else {
           // Handle Withdrawing Fixed Lockup Tokens
+          if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP) {
+            
+          } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP) {
+
+          }
         }
 
         // require(userTokenBalance[msg.sender][tokenAddress] >= amount);
@@ -88,5 +97,50 @@ contract yVault is ERC20 {
         // _mint(msg.sender, yDaiReceived);
         // emit tokenWithdrawalComplete(tokenAddress, amount);
     }
+
+    // Allow User to claim in wrapped or unwrapped form
+    function claimYInterest(bool wrapped) public {
+      
+      TokenDeposit[] storage noLockupDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.NO_LOCKUP];
+      uint256 interestPayment = 0;
+      for (uint i = 0; i < noLockupDeposits.length; i++) {
+        TokenDeposit storage userDeposit = noLockupDeposits[i];
+        interestPayment += calculateInterestPayments(userDeposit, LockupKind.NO_LOCKUP);
+      }
+
+      TokenDeposit[] storage eightWeekDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.EIGHT_WEEK_LOCKUP];
+      for (uint i = 0; i < eightWeekDeposits.length; i++) {
+        TokenDeposit storage userDeposit = eightWeekDeposits[i];
+        interestPayment += calculateInterestPayments(userDeposit, LockupKind.EIGHT_WEEK_LOCKUP);
+      }
+
+      TokenDeposit[] storage oneYearDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.ONE_YEAR_LOCKUP];
+      for (uint i = 0; i < oneYearDeposits.length; i++) {
+        TokenDeposit storage userDeposit = oneYearDeposits[i];
+        interestPayment += calculateInterestPayments(userDeposit, LockupKind.ONE_YEAR_LOCKUP);
+      }
+      if (!wrapped) _mint(msg.sender, interestPayment.mul(10 ** uint256(decimals())));
+      else yTokenBalances[msg.sender] = yTokenBalances[msg.sender].add(interestPayment);
+    }
+
+    function calculateInterestPayments(TokenDeposit storage tokenDeposit, LockupKind lockupType) private
+      returns (uint256 payment) 
+    {
+      uint256 weeksSinceLastPayment = block.timestamp.sub(tokenDeposit.lastInterestPaymentTime).div(1 weeks);
+      if (weeksSinceLastPayment > 0) {
+        tokenDeposit.lastInterestPaymentTime = tokenDeposit.lastInterestPaymentTime.add(weeksSinceLastPayment);
+        if (lockupType == LockupKind.NO_LOCKUP) {
+          payment = (tokenDeposit.depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
+        } else if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP){
+          payment = (tokenDeposit.depositAmount.mul((EIGHT_WEEK_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
+        } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP){
+          payment = (tokenDeposit.depositAmount.mul((ONE_YEAR_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
+        }
+      }
+    }
+
+    // function updateYVaultDeposits() public {
+
+    // }
 
 }
