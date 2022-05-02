@@ -42,10 +42,7 @@ contract yVault is ERC20, Ownable {
 
     mapping (address => uint256) yTokenBalances;
 
-    constructor(address _token) public ERC20(
-      string(abi.encodePacked("yearn ", ERC20(_token).name())),
-      string(abi.encodePacked("y", ERC20(_token).symbol()))
-    ) {
+    constructor(address _token) public ERC20("yDai", "yDai") {
       token = IERC20(_token);    
     }
 
@@ -146,8 +143,9 @@ contract yVault is ERC20, Ownable {
       _mint(msg.sender, amount.mul(10 ** uint256(decimals())));
     }
 
-    // function updateYVaultDeposits() public {
-
+    
+    // function updateYVault(address account) public {
+      
     // }
 
 }

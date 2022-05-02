@@ -29,12 +29,15 @@ module.exports = {
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
+    // forking: {
+    //   url: process.env.MAINNET_URL || "",
+    //   blockNumber: 14693000
+    // }
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
-    currency: "USD",
+    enabled: false
   },
-  etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
-  },
+  mocha: {
+    timeout: 100000
+  }
 };
