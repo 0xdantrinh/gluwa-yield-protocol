@@ -1,12 +1,16 @@
-async function bean() {
-  let tokenJson = fs.readFileSync(`./artifacts/contracts/mocks/MockToken.sol/MockToken.json`);
+var fs = require('fs');
 
+const DAI = '0x6B175474E89094C44Da98b954EedeAC495271d0F';
+
+async function dai() {
+  let tokenJson = fs.readFileSync(`./artifacts/contracts/mocks/MockToken.sol/MockToken.json`);
   await network.provider.send("hardhat_setCode", [
-    BEAN,
+    DAI,
     JSON.parse(tokenJson).deployedBytecode,
   ]);
-
-  const bean = await ethers.getContractAt("MockToken", BEAN);
-  await bean.setDecimals(6);
-  return BEAN;
+  const dai = await ethers.getContractAt("MockToken", DAI);
+  await dai.setDecimals(18);
+  return DAI;
 }
+
+exports.impersonateDai = dai

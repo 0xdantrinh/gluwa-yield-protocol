@@ -1,6 +1,7 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const ERC20ABI = require('./ERC20.json');
+const { impersonateDai } = require('./../scripts/impersonate.js')
 
 describe('yDaiVault', function () {
   before(async function () {
@@ -11,45 +12,25 @@ describe('yDaiVault', function () {
     const DAI_ADDRESS = "0x6b175474e89094c44da98b954eedeac495271d0f";
     const yVault = await ethers.getContractFactory("yVault");
     this.yDaiVault = await yVault.deploy("0x6B175474E89094C44Da98b954EedeAC495271d0F");
-    
-    this.DAI = new ethers.Contract(DAI_ADDRESS, ERC20ABI, ethers.getDefaultProvider());    
+    const dai = await impersonateDai();
+    console.log("dai address", dai)
 
-    console.log(`Total Dai: ${await this.DAI.balanceOf(owner.address)}`)
+    this.dai = await ethers.getContractAt('MockToken', DAI_ADDRESS);
+    console.log("mocked dai", this.dai)
 
-    ownerAddress = this.yDaiVault.account;
+    vaultOwnerAddress = this.yDaiVault.account;
 
     await this.yDaiVault.deployed();
 
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: ["0x6B175474E89094C44Da98b954EedeAC495271d0F"],
-    });    
-    daiSigner = await ethers.getSigner("0x6B175474E89094C44Da98b954EedeAC495271d0F");
-
-    await user.sendTransaction({
-      to: daiSigner.address,
-      value: ethers.utils.parseEther("1.0")
-    });
-
-    console.log(`Total Dai: ${await this.DAI.balanceOf(daiSigner.address)}`)
-
-    await this.DAI.connect(daiSigner).approve(this.yDaiVault.address, "100000");
+    // await user.sendTransaction({
+    //   to: daiSigner.address,
+    //   value: ethers.utils.parseEther("1.0")
+    // });
     
-    // await DAI.approve(this.dai.address, "10000")
-    const success = await this.DAI.connect(daiSigner).transfer(this.yDaiVault.address, "10000");
-    console.log(success)
-    console.log(`Total Dai: ${await this.DAI.balanceOf(this.yDaiVault.address)}`)
-    
-    // await this.bean.mint(userAddress, '1000000000')
-    // await this.bean.mint(user2Address, '1000000000')
-    // await this.bean.mint(this.pair.address, '100000')
-    // await this.weth.mint(this.pair.address, '100')
-    // await this.pair.connect(user).approve(this.silo.address, '100000000000')
-    // await this.pair.connect(user2).approve(this.silo.address, '100000000000')
-    // await this.bean.connect(user).approve(this.silo.address, '100000000000')
-    // await this.bean.connect(user2).approve(this.silo.address, '100000000000')
-    // await this.pair.faucet(userAddress, '100');
-    // await this.pair.set('100000', '100','1');
+    await this.dai.mint(userAddress, '100000')
+    await this.dai.mint(user2Address, '100000')
+    await this.dai.mint(this.yDaiVault.address, '1000000000')
+    console.log(`Total Dai: ${await this.dai.balanceOf(user.address)}`)
 
   });
 
@@ -75,8 +56,8 @@ describe('yDaiVault', function () {
 
     describe('dai initialization', async function () {
       it('Dai Mints Correctly', async function () {
-        const initialDai = await this.DAI.balanceOf(this.yDaiVault.address)
-        expect(initialDai).to.be.equal('100000');
+        const initialDai = await this.dai.balanceOf(this.yDaiVault.address)
+        expect(initialDai).to.be.equal('1000000000');
       });
     });
 
