@@ -1,7 +1,12 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const ERC20ABI = require('./ERC20.json');
 const { impersonateDai } = require('./../scripts/impersonate.js')
+
+const LockupKind = {
+  NO_LOCKUP: 0,
+  EIGHT_WEEK_LOCKUP: 1,
+  ONE_YEAR_LOCKUP: 2,
+}
 
 describe('yDaiVault', function () {
   before(async function () {
@@ -30,6 +35,8 @@ describe('yDaiVault', function () {
     await this.dai.mint(userAddress, '100000')
     await this.dai.mint(user2Address, '100000')
     await this.dai.mint(this.yDaiVault.address, '1000000000')
+    await this.dai.connect(user).approve(this.yDaiVault.address, '100000000000');
+    await this.dai.connect(user2).approve(this.yDaiVault.address, '100000000000'); 
     console.log(`Total Dai: ${await this.dai.balanceOf(user.address)}`)
 
   });
@@ -61,20 +68,19 @@ describe('yDaiVault', function () {
       });
     });
 
-    // describe('harvest beans', async function () {
-    //   it('reverts when plot is not harvestable', async function () {
-    //     await expect(this.claim.connect(user).harvest(['1'], false)).to.be.revertedWith('Claim: Plot not harvestable.')
-    //     await expect(this.claim.connect(user).harvest(['1000000'], false)).to.be.revertedWith('Claim: Plot not harvestable.')
-    //   });
+    describe('user dai deposits', async function () {
+      // it('reverts when plot is not harvestable', async function () {
+      //   await expect(this.claim.connect(user).harvest(['1'], false)).to.be.revertedWith('Claim: Plot not harvestable.')
+      //   await expect(this.claim.connect(user).harvest(['1000000'], false)).to.be.revertedWith('Claim: Plot not harvestable.')
+      // });
 
-    //   it('successfully harvests beans', async function () {
-    //     const beans = await this.bean.balanceOf(userAddress)
-    //     await this.claim.connect(user).harvest(['0'], false)
-    //     const newBeans = await this.bean.balanceOf(userAddress)
-    //     expect(await this.field.plot(userAddress, '27')).to.be.equal('0');
-    //     expect(newBeans.sub(beans)).to.be.equal('1000');
-    //   })
-    // });
+      it('successfully deposits dai into no lockup', async function () {
+        const dai = await this.dai.balanceOf(userAddress)
+        await this.yDaiVault.connect(user).addTokenDeposit('1000', LockupKind.NO_LOCKUP);
+        const newdai = await this.dai.balanceOf(userAddress)
+        expect(newdai.sub(dai)).to.be.equal('-1000');
+      })
+    });
 
     
   });

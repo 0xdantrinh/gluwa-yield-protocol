@@ -1,5 +1,15 @@
 {
-  "name": "hardhat-project",
+  "name": "jack-hh",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat compile && hardhat test",
+    "clean": "hardhat clean"
+  },
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.5",
     "@nomiclabs/hardhat-etherscan": "^3.0.3",

@@ -42,7 +42,7 @@ contract yVault is ERC20, Ownable {
 
     mapping (address => uint256) yTokenBalances;
 
-    constructor(address _token) public ERC20("yDai", "yDai") {
+    constructor(address _token) public ERC20("yDai", "YDAI") {
       token = IERC20(_token);    
     }
 
@@ -52,7 +52,9 @@ contract yVault is ERC20, Ownable {
 
     function addTokenDeposit(uint256 amount, LockupKind lockupType) public  {
         require(token.balanceOf(msg.sender) >= amount, "Your token amount must be greater then you are trying to deposit");
-        token.safeApprove(address(this), amount);
+        uint256 allowance = token.allowance(msg.sender, address(this));
+        require(allowance >= amount, "Check the token allowance");
+
         token.safeTransferFrom(msg.sender, address(this), amount);
 
         TokenDeposit memory deposit;
