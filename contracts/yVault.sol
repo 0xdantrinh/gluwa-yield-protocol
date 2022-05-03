@@ -46,9 +46,9 @@ contract yVault is ERC20, Ownable {
       token = IERC20(_token);    
     }
 
-    event TokenDepositComplete(IERC20 tokenAddress, uint256 amount, uint256 lockupTime);
-    event TokenWithdrawalComplete(IERC20 tokenAddress, uint256 amount);
-    event exchangeYTokenComplete(IERC20 tokenAddress, uint256 amount);
+    event TokenDepositComplete(address depositor, uint256 amount, uint256 lockupTime);
+    event TokenWithdrawalComplete(address withdrawer, LockupKind lockupType, uint256 amount);
+    event exchangeYTokenComplete(address exchanger, uint256 amount);
 
     function addTokenDeposit(uint256 amount, LockupKind lockupType) public  {
         require(token.balanceOf(msg.sender) >= amount, "Your token amount must be greater then you are trying to deposit");
@@ -63,7 +63,7 @@ contract yVault is ERC20, Ownable {
         deposit.lastInterestPaymentTime = block.timestamp;
         userTokenDepositsByLockupType[msg.sender][lockupType].push(deposit);
         
-        emit TokenDepositComplete(token, amount, deposit.depositTime);
+        emit TokenDepositComplete(msg.sender, amount, deposit.depositTime);
     }
 
 
@@ -74,27 +74,38 @@ contract yVault is ERC20, Ownable {
 
         // Send Token(DAI) from this contract to the user who exchanged yToken(yDAI)
         token.safeTransfer(msg.sender, amount);
-        emit exchangeYTokenComplete(token, amount);
+        emit exchangeYTokenComplete(msg.sender, amount);
     }
 
-    function withdrawAmountFromLockup(uint256 amount, LockupKind lockupType) public {
+    function withdrawAmountFromLockup(uint256 noLockupAmountToWithdraw, LockupKind lockupType) public 
+      returns(uint256 withdrawnAmount) {
         if (lockupType == LockupKind.NO_LOCKUP) {
-          // Withdraw No Lockup Tokens
+          // Claim Rest of Interest for the User
+          // Withdraw No Lockup Token
+          withdrawnAmount = withdrawnAmount.add(calculateNoLockupInterestPaymentsAndWithdraw(noLockupAmountToWithdraw, userTokenDepositsByLockupType[msg.sender][LockupKind.NO_LOCKUP]));
         } else {
-          // Handle Withdrawing Fixed Lockup Tokens
+          // Handle Withdrawing Fixed Lockup Token
+          // Must withdraw All
           if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP) {
-            
+            TokenDeposit[] storage eightWeekDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.EIGHT_WEEK_LOCKUP];
+            for (uint i = 0; i < eightWeekDeposits.length; i++) {
+              // Claim Rest of Interest for the User
+              TokenDeposit storage userDeposit = eightWeekDeposits[i];
+              withdrawnAmount = withdrawnAmount.add(calculateFixedInterestPaymentAndWithdraw(userDeposit, LockupKind.EIGHT_WEEK_LOCKUP));
+            }
           } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP) {
-
+            TokenDeposit[] storage oneYearDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.ONE_YEAR_LOCKUP];
+            for (uint i = 0; i < oneYearDeposits.length; i++) {
+              // Claim Rest of Interest for the User
+              TokenDeposit storage userDeposit = oneYearDeposits[i];
+              withdrawnAmount = withdrawnAmount.add(calculateFixedInterestPaymentAndWithdraw(userDeposit, LockupKind.ONE_YEAR_LOCKUP));
+            }
           }
         }
 
-        // require(userTokenBalance[msg.sender][tokenAddress] >= amount);
-        // require(IERC20(tokenAddress).transfer(msg.sender, amount), "the transfer failed");
-        // userTokenBalance[msg.sender][tokenAddress] -= amount;
-        // uint256 yDaiReceived;
-        // _mint(msg.sender, yDaiReceived);
-        // emit tokenWithdrawalComplete(tokenAddress, amount);
+        require(withdrawnAmount > 0);
+        token.safeTransferFrom(address(this), msg.sender, withdrawnAmount);
+        emit TokenWithdrawalComplete(msg.sender, lockupType, withdrawnAmount);
     }
 
     // Allow User to claim in wrapped or unwrapped form
@@ -104,30 +115,34 @@ contract yVault is ERC20, Ownable {
       uint256 interestPayment = 0;
       for (uint i = 0; i < noLockupDeposits.length; i++) {
         TokenDeposit storage userDeposit = noLockupDeposits[i];
-        interestPayment += calculateInterestPayments(userDeposit, LockupKind.NO_LOCKUP);
+        interestPayment += calculateInterestPayment(userDeposit, LockupKind.NO_LOCKUP);
       }
 
       TokenDeposit[] storage eightWeekDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.EIGHT_WEEK_LOCKUP];
       for (uint i = 0; i < eightWeekDeposits.length; i++) {
         TokenDeposit storage userDeposit = eightWeekDeposits[i];
-        interestPayment += calculateInterestPayments(userDeposit, LockupKind.EIGHT_WEEK_LOCKUP);
+        interestPayment += calculateInterestPayment(userDeposit, LockupKind.EIGHT_WEEK_LOCKUP);
+        delete eightWeekDeposits[i];
       }
 
       TokenDeposit[] storage oneYearDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.ONE_YEAR_LOCKUP];
       for (uint i = 0; i < oneYearDeposits.length; i++) {
         TokenDeposit storage userDeposit = oneYearDeposits[i];
-        interestPayment += calculateInterestPayments(userDeposit, LockupKind.ONE_YEAR_LOCKUP);
+        interestPayment += calculateInterestPayment(userDeposit, LockupKind.ONE_YEAR_LOCKUP);
+        delete oneYearDeposits[i];
       }
-      if (!wrapped) _mint(msg.sender, interestPayment.mul(10 ** uint256(decimals())));
+      require(interestPayment > 0, "No Interest to be paid out for Account Yet");
+      if (!wrapped) _mint(msg.sender, interestPayment);
       else yTokenBalances[msg.sender] = yTokenBalances[msg.sender].add(interestPayment);
     }
 
-    function calculateInterestPayments(TokenDeposit storage tokenDeposit, LockupKind lockupType) private
+    function calculateInterestPayment(TokenDeposit storage tokenDeposit, LockupKind lockupType) private
       returns (uint256 payment) 
     {
       uint256 weeksSinceLastPayment = block.timestamp.sub(tokenDeposit.lastInterestPaymentTime).div(1 weeks);
       if (weeksSinceLastPayment > 0) {
-        tokenDeposit.lastInterestPaymentTime = tokenDeposit.lastInterestPaymentTime.add(weeksSinceLastPayment);
+        uint256 lastPayment = tokenDeposit.lastInterestPaymentTime.add(weeksSinceLastPayment);
+        tokenDeposit.lastInterestPaymentTime = lastPayment;
         if (lockupType == LockupKind.NO_LOCKUP) {
           payment = (tokenDeposit.depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
         } else if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP){
@@ -138,16 +153,51 @@ contract yVault is ERC20, Ownable {
       }
     }
 
+    function calculateNoLockupInterestPaymentsAndWithdraw(uint256 amountToWithdraw, TokenDeposit[] storage tokenDeposits) private
+      returns (uint256 payment) 
+    {
+      for (uint i = 0; i < tokenDeposits.length; i++) {
+        uint256 weeksSinceLastPayment = block.timestamp.sub(tokenDeposits[i].lastInterestPaymentTime).div(1 weeks);
+        if (weeksSinceLastPayment > 0) {
+          if (tokenDeposits[i].depositAmount > amountToWithdraw) {
+            uint256 lastPayment = tokenDeposits[i].lastInterestPaymentTime.add(weeksSinceLastPayment);
+            tokenDeposits[i].lastInterestPaymentTime = lastPayment;
+            payment = amountToWithdraw.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+            return payment;
+          } else if (tokenDeposits[i].depositAmount == amountToWithdraw) {
+            payment = tokenDeposits[i].depositAmount.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+            delete tokenDeposits[i];
+            return payment;
+          } else {
+            payment = tokenDeposits[i].depositAmount.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+            amountToWithdraw = amountToWithdraw.sub(tokenDeposits[i].depositAmount);
+            delete tokenDeposits[i];
+          }
+
+        }
+      }
+    }
+
+    function calculateFixedInterestPaymentAndWithdraw(TokenDeposit memory tokenDeposit, LockupKind lockupType) private view
+      returns (uint256 payment) 
+    {
+      uint256 weeksSinceLastPayment = block.timestamp.sub(tokenDeposit.lastInterestPaymentTime).div(1 weeks);
+      if (weeksSinceLastPayment > 0) {
+        if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP){
+          // TODO Charge early withdrawal fees
+          payment = tokenDeposit.depositAmount.add((tokenDeposit.depositAmount.mul((EIGHT_WEEK_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+        } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP){
+          // TODO Charge early withdrawal fees
+          payment = tokenDeposit.depositAmount.add((tokenDeposit.depositAmount.mul((ONE_YEAR_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+        }
+      }
+    }
+
     function unwrapYTokens() public {
       uint256 amount = yTokenBalances[msg.sender];
       require(amount > 0, "You must have wrapped yTokens to unwrap");
       yTokenBalances[msg.sender] = 0;
-      _mint(msg.sender, amount.mul(10 ** uint256(decimals())));
+      _mint(msg.sender, amount);
     }
-
-    
-    // function updateYVault(address account) public {
-      
-    // }
 
 }
