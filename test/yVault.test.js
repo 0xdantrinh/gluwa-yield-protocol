@@ -36,7 +36,7 @@ describe('yDaiVault', function () {
     await this.dai.mint(user2Address, '100000')
     await this.dai.mint(this.yDaiVault.address, '1000000000')
     await this.dai.connect(user).approve(this.yDaiVault.address, '100000000000');
-    await this.dai.connect(user2).approve(this.yDaiVault.address, '100000000000'); 
+    await this.dai.connect(user2).approve(this.yDaiVault.address, '100000000000');
     console.log(`Total Dai: ${await this.dai.balanceOf(user.address)}`)
 
   });
@@ -79,6 +79,44 @@ describe('yDaiVault', function () {
         await this.yDaiVault.connect(user).addTokenDeposit('1000', LockupKind.NO_LOCKUP);
         const newdai = await this.dai.balanceOf(userAddress)
         expect(newdai.sub(dai)).to.be.equal('-1000');
+      })
+
+      it('successfully deposits dai into 8 week lockup', async function () {
+        const dai = await this.dai.balanceOf(userAddress)
+        await this.yDaiVault.connect(user).addTokenDeposit('2000', LockupKind.EIGHT_WEEK_LOCKUP);
+        const newdai = await this.dai.balanceOf(userAddress)
+        expect(newdai.sub(dai)).to.be.equal('-2000');
+      })
+
+      it('successfully deposits dai into one year lockup', async function () {
+        const dai = await this.dai.balanceOf(userAddress)
+        await this.yDaiVault.connect(user).addTokenDeposit('3000', LockupKind.ONE_YEAR_LOCKUP);
+        const newdai = await this.dai.balanceOf(userAddress)
+        expect(newdai.sub(dai)).to.be.equal('-3000');
+      })
+    });
+
+    describe('user dai withdrawal', async function () {
+
+      it('successfully partially withdraws dai from no lockup', async function () {
+        const dai = await this.dai.balanceOf(userAddress)
+        await this.yDaiVault.connect(user).withdrawAmount('100', LockupKind.NO_LOCKUP);
+        const newdai = await this.dai.balanceOf(userAddress)
+        expect(newdai.sub(dai)).to.be.equal('100');
+      });
+
+      it('successfully partially withdraws dai from 8 week lockup', async function () {
+        const dai = await this.dai.balanceOf(userAddress)
+        await this.yDaiVault.connect(user).withdrawAmount('0', LockupKind.EIGHT_WEEK_LOCKUP);
+        const newdai = await this.dai.balanceOf(userAddress)
+        expect(newdai.sub(dai)).to.be.equal('2000');
+      });
+
+      it('successfully partially withdraws dai from no lockup', async function () {
+        const dai = await this.dai.balanceOf(userAddress)
+        await this.yDaiVault.connect(user).withdrawAmount('100', LockupKind.ONE_YEAR_LOCKUP);
+        const newdai = await this.dai.balanceOf(userAddress)
+        expect(newdai.sub(dai)).to.be.equal('3000');
       })
     });
 

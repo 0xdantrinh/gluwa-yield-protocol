@@ -77,12 +77,13 @@ contract yVault is ERC20, Ownable {
         emit exchangeYTokenComplete(msg.sender, amount);
     }
 
-    function withdrawAmountFromLockup(uint256 noLockupAmountToWithdraw, LockupKind lockupType) public 
+    function withdrawAmount(uint256 noLockupAmountToWithdraw, LockupKind lockupType) public 
       returns(uint256 withdrawnAmount) {
         if (lockupType == LockupKind.NO_LOCKUP) {
           // Claim Rest of Interest for the User
           // Withdraw No Lockup Token
-          withdrawnAmount = withdrawnAmount.add(calculateNoLockupInterestPaymentsAndWithdraw(noLockupAmountToWithdraw, userTokenDepositsByLockupType[msg.sender][LockupKind.NO_LOCKUP]));
+          console.log("withdrawing no lockup");
+          withdrawnAmount = calculateNoLockupInterestPaymentsAndWithdraw(noLockupAmountToWithdraw, userTokenDepositsByLockupType[msg.sender][LockupKind.NO_LOCKUP]);
         } else {
           // Handle Withdrawing Fixed Lockup Token
           // Must withdraw All
@@ -103,13 +104,13 @@ contract yVault is ERC20, Ownable {
           }
         }
 
-        require(withdrawnAmount > 0);
-        token.safeTransferFrom(address(this), msg.sender, withdrawnAmount);
+        require(withdrawnAmount > 0, "Must withdraw more than 0");
+        token.safeTransfer(msg.sender, withdrawnAmount);
         emit TokenWithdrawalComplete(msg.sender, lockupType, withdrawnAmount);
     }
 
     // Allow User to claim in wrapped or unwrapped form
-    function claimYInterest(bool wrapped) public {
+    function claimYInterestWithoutWithdrawal(bool wrapped) public {
       
       TokenDeposit[] storage noLockupDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.NO_LOCKUP];
       uint256 interestPayment = 0;
@@ -122,14 +123,12 @@ contract yVault is ERC20, Ownable {
       for (uint i = 0; i < eightWeekDeposits.length; i++) {
         TokenDeposit storage userDeposit = eightWeekDeposits[i];
         interestPayment += calculateInterestPayment(userDeposit, LockupKind.EIGHT_WEEK_LOCKUP);
-        delete eightWeekDeposits[i];
       }
 
       TokenDeposit[] storage oneYearDeposits = userTokenDepositsByLockupType[msg.sender][LockupKind.ONE_YEAR_LOCKUP];
       for (uint i = 0; i < oneYearDeposits.length; i++) {
         TokenDeposit storage userDeposit = oneYearDeposits[i];
         interestPayment += calculateInterestPayment(userDeposit, LockupKind.ONE_YEAR_LOCKUP);
-        delete oneYearDeposits[i];
       }
       require(interestPayment > 0, "No Interest to be paid out for Account Yet");
       if (!wrapped) _mint(msg.sender, interestPayment);
@@ -144,10 +143,13 @@ contract yVault is ERC20, Ownable {
         uint256 lastPayment = tokenDeposit.lastInterestPaymentTime.add(weeksSinceLastPayment);
         tokenDeposit.lastInterestPaymentTime = lastPayment;
         if (lockupType == LockupKind.NO_LOCKUP) {
+          // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS
           payment = (tokenDeposit.depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
         } else if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP){
+        // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS          
           payment = (tokenDeposit.depositAmount.mul((EIGHT_WEEK_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
         } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP){
+        // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS
           payment = (tokenDeposit.depositAmount.mul((ONE_YEAR_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
         }
       }
@@ -158,38 +160,41 @@ contract yVault is ERC20, Ownable {
     {
       for (uint i = 0; i < tokenDeposits.length; i++) {
         uint256 weeksSinceLastPayment = block.timestamp.sub(tokenDeposits[i].lastInterestPaymentTime).div(1 weeks);
-        if (weeksSinceLastPayment > 0) {
-          if (tokenDeposits[i].depositAmount > amountToWithdraw) {
-            uint256 lastPayment = tokenDeposits[i].lastInterestPaymentTime.add(weeksSinceLastPayment);
-            tokenDeposits[i].lastInterestPaymentTime = lastPayment;
-            payment = amountToWithdraw.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
-            return payment;
-          } else if (tokenDeposits[i].depositAmount == amountToWithdraw) {
-            payment = tokenDeposits[i].depositAmount.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
-            delete tokenDeposits[i];
-            return payment;
-          } else {
-            payment = tokenDeposits[i].depositAmount.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
-            amountToWithdraw = amountToWithdraw.sub(tokenDeposits[i].depositAmount);
-            delete tokenDeposits[i];
-          }
-
+        if (tokenDeposits[i].depositAmount > amountToWithdraw) {
+          uint256 lastPayment = tokenDeposits[i].lastInterestPaymentTime.add(weeksSinceLastPayment);
+          tokenDeposits[i].lastInterestPaymentTime = lastPayment;
+          // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS          
+          payment = amountToWithdraw.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+          tokenDeposits[i].depositAmount = tokenDeposits[i].depositAmount.sub(amountToWithdraw);
+          return payment;
+        } else if (tokenDeposits[i].depositAmount == amountToWithdraw) {
+          // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS
+          payment = tokenDeposits[i].depositAmount.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+          delete tokenDeposits[i];
+          return payment;
+        } else {
+          // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS
+          payment = tokenDeposits[i].depositAmount.add((tokenDeposits[i].depositAmount.mul((NO_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
+          amountToWithdraw = amountToWithdraw.sub(tokenDeposits[i].depositAmount);
+          delete tokenDeposits[i];
         }
       }
     }
 
     function calculateFixedInterestPaymentAndWithdraw(TokenDeposit memory tokenDeposit, LockupKind lockupType) private view
-      returns (uint256 payment) 
+      returns (uint256 paymentAndWithdrawal) 
     {
       uint256 weeksSinceLastPayment = block.timestamp.sub(tokenDeposit.lastInterestPaymentTime).div(1 weeks);
-      if (weeksSinceLastPayment > 0) {
-        if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP){
-          // TODO Charge early withdrawal fees
-          payment = tokenDeposit.depositAmount.add((tokenDeposit.depositAmount.mul((EIGHT_WEEK_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
-        } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP){
-          // TODO Charge early withdrawal fees
-          payment = tokenDeposit.depositAmount.add((tokenDeposit.depositAmount.mul((ONE_YEAR_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment));
-        }
+      if (lockupType == LockupKind.EIGHT_WEEK_LOCKUP){
+        //Charge early withdrawal fees
+        // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS
+        paymentAndWithdrawal = (tokenDeposit.depositAmount.mul((EIGHT_WEEK_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
+        paymentAndWithdrawal = paymentAndWithdrawal.add(tokenDeposit.depositAmount.mul(uint256(1).sub(FIXED_LOCKUP_EARLY_WITHDRAWAL_FEE)));
+      } else if (lockupType == LockupKind.ONE_YEAR_LOCKUP){
+        //Charge early withdrawal fees
+        // TODO IMPLEMENT 18 DECIMAL MATH TO PROPERLY CALCULATE INTEREST AND FEEDS
+        paymentAndWithdrawal = (tokenDeposit.depositAmount.mul((ONE_YEAR_LOCKUP_APY.div(52)))).mul(weeksSinceLastPayment);
+        paymentAndWithdrawal = paymentAndWithdrawal.add(tokenDeposit.depositAmount.mul(1 - FIXED_LOCKUP_EARLY_WITHDRAWAL_FEE));
       }
     }
 
