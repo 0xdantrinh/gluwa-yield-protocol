@@ -1,8 +1,6 @@
-# Advanced Sample Hardhat Project
+# Gluwa yDai Vault Project for Daniel Trinh
 
-This project demonstrates an advanced Hardhat use case, integrating other tools commonly used alongside Hardhat in the ecosystem.
-
-The project comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts. It also comes with a variety of other tools, preconfigured to work with the project code.
+This ethereum project demonstrates a client project for a customer that needs a yDai vault yield generating protocol. Users can deposit and withdraw their dai into this protocol. They can exchange yield bearing YDAI into DAI as well. Instructions for the assignment were followed via private Gluwa project requirements. The tests can be run using `npm test`.
 
 Try running some of the following tasks:
 
